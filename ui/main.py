@@ -29,3 +29,6 @@ def main():
         scheduler.stop_scheduler()
     else:
         print("Oops, you inputted an invalid number, please enter one of the following numbers instead: 1, 2, 3, 4")
+
+if __name__ == "__main__":
+    main()
