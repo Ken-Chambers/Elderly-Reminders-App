@@ -1,5 +1,5 @@
 import threading
-import time
+from datetime import datetime
 
 class Reminder:
     def __init__(self, task, time):
@@ -27,4 +27,4 @@ class Reminder:
     def display_reminder(self):
         with self.lock:
             status = "Set" if self.is_set else "Not Set"
-            print(f"Task: {self.task}, Time: {self.time}")
+            print(f"Task: {self.task}, Time: {self.reminder_time.strftime('%H:%M')}, Status: {status}")

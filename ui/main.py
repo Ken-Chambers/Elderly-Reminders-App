@@ -2,7 +2,7 @@ import time
 import threading
 import tkinter as tk
 from tkinter import messagebox, simpledialog
-
+from datetime import datetime
 
 class Reminder:
     def __init__(self, task, time):
@@ -74,10 +74,25 @@ class DailyReminderApp:
 
     def set_reminder(self):
         task = simpledialog.askstring("Set Reminder", "Type in the name of your reminder:")
-        time = simpledialog.askstring("Set Reminder", "Type in the time for your reminder to go off:")
 
+        while True:  # Loop until a valid time format is provided
+            time_input = simpledialog.askstring("Set Reminder", "Type in the time for your reminder to go off (HH:MM AM/PM):")
+            
+            try:
+                reminder_time = datetime.strptime(time_input, '%I:%M %p')  # Updated format to include AM/PM
+                break  # Break out of the loop if the input is in the correct format
+            except ValueError:
+                messagebox.showwarning("Invalid Time Format", "Please enter time in HH:MM AM/PM format")
+                continue  # Continue the loop to ask for input again
+
+        # Check for duplicate reminders before adding a new one
         with self.reminders_lock:
-            new_reminder = Reminder(task, time)
+            for existing_reminder in self.reminders:
+                if existing_reminder.task == task and existing_reminder.time == reminder_time:
+                    messagebox.showwarning("Duplicate Reminder", "Oops, there seems to be an existing reminder with the same name and time already, please try again.")
+                    return  # Exit the method if a duplicate reminder is found
+
+            new_reminder = Reminder(task, reminder_time)  # Create Reminder object with specified time
             self.reminders.append(new_reminder)
 
         messagebox.showinfo("Reminder Set", "Reminder set successfully!")
