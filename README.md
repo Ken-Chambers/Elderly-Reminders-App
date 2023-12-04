@@ -19,7 +19,7 @@
   - Deleting reminders: By typing in the name of an existing reminder, the specific reminder will be deleted
   - Triggering reminders: Reminders are triggered by the use of threading to check every minute to make sure it is time for the reminder to go off.
 
-## Discussion and Conclusion
+## Discussion and Conclusion:
 ### One of the biggest issues with our current system is that it solely operates on the user's current system time and is only for the current day so reminders cannot be set for the future. ALong with this, we currently have no way to save reminders after the app has be closed so in order for the reminder to trigger, the user would have to leave the app open. Another issue is that there is choice for what time system the user wants to use and only allows the 24-hour clock system.
 
 ### As for what we used specific from what was learned in-class, we made use of threading, semaphores and mutexes to allow for the app to work efficiently and properly with end goal of having a successful reminder app. By implementing threading, the program checks the time every minute to see if it is time for a user-created reminder to go off and with the help of semaphores and mutexes, we were able to make sure everything stays in synch with one other for optimal performance.
