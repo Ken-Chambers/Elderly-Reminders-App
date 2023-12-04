@@ -1,158 +1,150 @@
-import time
-import threading
 import tkinter as tk
 from tkinter import messagebox, simpledialog
 from datetime import datetime
+import threading
 
-class Reminder:
-    def __init__(self, task, time):
-        self.task = task
-        self.time = time
-        self.isSet = True  # Initially set to True, modify as needed
+class ReminderApp:
+    def __init__(self, root):
+        # Initialize the main window
+        self.root = root
+        self.root.title("Reminder App")
+        self.reminders = []  # List to store reminders
+        self.reminders_lock = threading.Lock()  # Mutex to synchronize access to reminders list
+        self.semaphore = threading.Semaphore(1)  # Semaphore to control access to check_reminders function
+        self.thread_running = False  # Flag to track whether the check_reminders thread is running
+        self.create_widgets()
 
-
-class ReminderScheduler:
-    def __init__(self):
-        self.activeReminders = []
-        self.running = False
-        self.scheduler_thread = None
-
-    def schedule_reminder(self, reminder):
-        self.activeReminders.append(reminder)
-        print(f"Reminder has been scheduled for {reminder.task} at {reminder.time}")
-
-    def start_scheduler(self):
-        print("Scheduler started!")
-        self.running = True
-        while self.running:
-            currTime = time.strftime("%H:%M")
-            for reminder in self.activeReminders:
-                if reminder.time == currTime and reminder.isSet:
-                    print(f"Hi there! It's time to {reminder.task}.")
-            time.sleep(60)
-
-    def stop_scheduler(self):
-        self.running = False
-        if self.scheduler_thread and self.scheduler_thread.is_alive():
-            self.scheduler_thread.join()
-        print("Scheduler has been stopped.")
-
-
-class DailyReminderApp:
-    def __init__(self):
-        self.scheduler = ReminderScheduler()
-        self.reminders = []
-        self.reminders_lock = threading.Lock()
-        self.scheduler_semaphore = threading.Semaphore(1)
-
-        self.root = tk.Tk()
-        self.root.title("Daily Reminders App")
-
+    def create_widgets(self):
         # Set the initial size of the window
         self.root.geometry("1920x1080")
 
-        self.menu_frame = tk.Frame(self.root)
-        self.menu_frame.pack()
+        # Main Frame
+        main_frame = tk.Frame(self.root)
+        main_frame.pack()
 
-        self.create_menu()
+        # Welcome Text with added space
+        tk.Label(main_frame, text="Welcome to your Reminder App", font=("Helvetica", 60), fg='dark blue', bg='light blue').pack(pady=75)
 
-    def create_menu(self):
-        tk.Label(self.menu_frame, text="Welcome to the Daily Reminders App!", font=("Helvetica", 75)).pack()
+        # Frame for Name and Time
+        entry_frame = tk.Frame(main_frame)
+        entry_frame.pack()
 
+        # Labels and Entry widgets using pack
+        name_label = tk.Label(entry_frame, text="Enter Reminder Name:", font=("Helvetica", 40))
+        name_label.pack(pady=10)
+
+        self.name_entry = tk.Entry(entry_frame, font=("Helvetica", 35), width=20)
+        self.name_entry.pack(pady=10)
+
+        time_label = tk.Label(entry_frame, text="Enter Reminder Time (HH:MM):", font=("Helvetica", 35))
+        time_label.pack(pady=10)
+
+        self.time_entry = tk.Entry(entry_frame, font=("Helvetica", 40), width=20)
+        self.time_entry.pack(pady=10)
+
+        # Buttons Frame
+        button_frame = tk.Frame(main_frame)
+        button_frame.pack()
+
+        # Buttons
         options = [
-            ("Set a reminder", self.set_reminder),
-            ("Delete an existing reminder", self.delete_reminder),
-            ("Start the scheduler", self.start_scheduler),
-            ("Stop the scheduler", self.stop_scheduler),
-            ("List all reminders", self.list_reminders),
+            ("Set Reminder", self.set_reminder),
+            ("Show Reminders", self.show_reminders),
+            ("Delete Reminder", self.delete_reminder),
             ("Exit", self.exit_app),
         ]
 
-        for text, command in options:
-            tk.Button(self.menu_frame, text=text, command=command, font=("Helvetica", 50), bg="light blue",
-                      fg="black").pack(pady=15)
+        for i, (text, command) in enumerate(options):
+            tk.Button(button_frame, text=text, command=command, font=("Helvetica", 35), bg='pink').pack(pady=15)
 
     def set_reminder(self):
-        task = simpledialog.askstring("Set Reminder", "Type in the name of your reminder:")
+        # Function to set a new reminder
+        name = self.name_entry.get()
+        time_str = self.time_entry.get()
 
-        while True:  # Loop until a valid time format is provided
-            time_input = simpledialog.askstring("Set Reminder", "Type in the time for your reminder to go off (HH:MM AM/PM):")
-            
-            try:
-                reminder_time = datetime.strptime(time_input, '%I:%M %p')  # Updated format to include AM/PM
-                break  # Break out of the loop if the input is in the correct format
-            except ValueError:
-                messagebox.showwarning("Invalid Time Format", "Please enter time in HH:MM AM/PM format")
-                continue  # Continue the loop to ask for input again
+        if name and time_str:
+            with self.reminders_lock:
+                # Check if a reminder with the same name and time already exists
+                if any(reminder["name"].lower() == name.lower() and reminder["time"].strftime('%H:%M') == time_str for reminder in self.reminders):
+                    messagebox.showerror("Error", f"A reminder with the same name and time already exists.")
+                else:
+                    try:
+                        # Convert input time string to datetime object
+                        time = datetime.strptime(time_str, "%H:%M")
+                        reminder = {"name": name, "time": time}
 
-        # Check for duplicate reminders before adding a new one
-        with self.reminders_lock:
-            for existing_reminder in self.reminders:
-                if existing_reminder.task == task and existing_reminder.time == reminder_time:
-                    messagebox.showwarning("Duplicate Reminder", "Oops, there seems to be an existing reminder with the same name and time already, please try again.")
-                    return  # Exit the method if a duplicate reminder is found
+                        # Add the new reminder to the list
+                        self.reminders.append(reminder)
 
-            new_reminder = Reminder(task, reminder_time)  # Create Reminder object with specified time
-            self.reminders.append(new_reminder)
+                        # Start a separate thread to check for reminders
+                        if not self.thread_running:
+                            threading.Thread(target=self.check_reminders).start()
+                            self.thread_running = True
 
-        messagebox.showinfo("Reminder Set", "Reminder set successfully!")
-
-    def delete_reminder(self):
-        task = simpledialog.askstring("Delete Reminder", "Enter the name of an existing task you want to delete:")
-
-        with self.reminders_lock:
-            for reminder in self.reminders:
-                if reminder.task == task:
-                    reminder.delete_reminder()
-                    self.reminders.remove(reminder)
-                    messagebox.showinfo("Reminder Deleted", f"Reminder for '{task}' deleted.")
-                    break
-            else:
-                messagebox.showwarning("Reminder Not Found", f"No reminder found for '{task}'.")
-
-    def start_scheduler(self):
-        self.scheduler_semaphore.acquire()
-
-        if not self.scheduler.running:
-            self.scheduler_thread = threading.Thread(target=self.scheduler.start_scheduler)
-            self.scheduler_thread.start()
+                        messagebox.showinfo("Success", "Reminder set successfully!")
+                    except ValueError:
+                        messagebox.showerror("Error", "Invalid time format. Please use HH:MM.")
         else:
-            messagebox.showwarning("Scheduler Already Started", "Scheduler is already running.")
+            messagebox.showerror("Error", "Please enter both name and time.")
 
-        self.scheduler_semaphore.release()
-
-    def stop_scheduler(self):
-        try:
-            if self.scheduler.running:
-                self.scheduler.stop_scheduler()
-                messagebox.showinfo("Scheduler Stopped", "Scheduler stopped.")
-            else:
-                messagebox.showwarning("Scheduler Not Started",
-                                       "Scheduler not started. Please start the scheduler first.")
-        except AttributeError:
-            messagebox.showwarning("Scheduler Not Started", "Scheduler not started. Please start the scheduler first.")
-
-    def list_reminders(self):
+    def show_reminders(self):
+        # Function to show all reminders
         with self.reminders_lock:
             if not self.reminders:
-                messagebox.showinfo("No Reminders", "There are no reminders.")
+                messagebox.showinfo("Reminders", "No reminders set.")
                 return
 
+            # Create a formatted string with all reminders
             reminder_list = "\n".join(
-                [f"{i + 1}. {reminder.task} - Time: {reminder.time}" for i, reminder in enumerate(self.reminders)])
-            messagebox.showinfo("All Reminders", reminder_list)
+                [f"{reminder['name']} at {reminder['time'].strftime('%H:%M')}" for reminder in self.reminders])
+            messagebox.showinfo("Reminders", reminder_list)
+
+    def delete_reminder(self):
+        # Function to delete a reminder
+        with self.reminders_lock:
+            if not self.reminders:
+                messagebox.showinfo("No Reminders", "No reminders to delete.")
+                return
+
+            # Ask user for the name of the reminder to delete
+            selected_name = simpledialog.askstring("Delete Reminder", "Enter the name of the reminder to delete:")
+            if selected_name:
+                found = False
+                for reminder in self.reminders:
+                    if reminder["name"].lower() == selected_name.lower():
+                        # Remove the reminder from the list
+                        self.reminders.remove(reminder)
+                        messagebox.showinfo("Success", f"Reminder '{selected_name}' deleted successfully.")
+                        found = True
+                        break
+
+                if not found:
+                    messagebox.showinfo("Reminder Not Found", f"No reminder found with the name '{selected_name}'.")
+
+    def check_reminders(self):
+        # Function to check and show reminders when it's time
+        with self.semaphore:
+            while self.reminders:
+                current_time = datetime.now().time()
+
+                with self.reminders_lock:
+                    for reminder in self.reminders:
+                        if current_time >= reminder["time"].time():
+                            # Display a reminder message
+                            messagebox.showinfo("Reminder", f"It's time for {reminder['name']}!")
+                            # Remove the triggered reminder from the list
+                            self.reminders.remove(reminder)
+
+                # Check every 1 minute
+                threading.Event().wait(60)
 
     def exit_app(self):
-        if self.scheduler.running:
-            self.scheduler.stop_scheduler()
-
+        # Function to exit the application
+        # Add any necessary cleanup code here before quitting
+        self.thread_running = False  # Stop the check_reminders thread
         self.root.destroy()
 
-
-def main():
-    app = DailyReminderApp()
-    app.root.mainloop()
-
-
 if __name__ == "__main__":
-    main()
+    root = tk.Tk()
+    app = ReminderApp(root)
+    root.mainloop()
